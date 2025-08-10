@@ -23,10 +23,9 @@ function parseDailySeries(json: any): SeriesPoint[] {
     date,
     close: Number(obj["5. adjusted close"]) || Number(obj["4. close"]) || Number(obj["1. open"]) || 0,
   }));
-  // sort ascending by date
-  data.sort((a, b) => (a.date < b.date ? 1 : -1)); // start with newest first
-  data.reverse(); // make ascending
-  return data.filter(d => Number.isFinite(d.close));
+  // sort ascending by date (YYYY-MM-DD string compare works)
+  data.sort((a, b) => a.date.localeCompare(b.date));
+  return data.filter((d) => Number.isFinite(d.close));
 }
 
 function linearRegression(y: number[]) {
@@ -69,7 +68,11 @@ async function fetchSeries(symbol: string) {
   if (json["Error Message"] || json["Note"]) {
     throw new Error(json["Error Message"] || json["Note"] || "Unknown Alpha Vantage error");
   }
-  return parseDailySeries(json);
+  const parsed = parseDailySeries(json);
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error(`No time series data for ${symbol}`);
+  }
+  return parsed;
 }
 
 serve(async (req) => {
@@ -90,51 +93,55 @@ serve(async (req) => {
       metrics: { lastClose: number; trend: "up" | "down" | "flat"; expectedChangePct: number; volatility: number };
     }>;
 
-    for (const symbol of unique) {
-      try {
-        const series = await fetchSeries(symbol);
-        const closes = series.map(s => s.close);
-        const lastClose = closes[closes.length - 1];
-        const returns = [] as number[];
-        for (let i = 1; i < closes.length; i++) {
-          const r = (closes[i] - closes[i - 1]) / closes[i - 1];
-          if (Number.isFinite(r)) returns.push(r);
-        }
-        const vol = stdDev(returns);
-        const { m, b } = linearRegression(closes);
-        const trend: "up" | "down" | "flat" = m > 0 ? "up" : m < 0 ? "down" : "flat";
-        const lastIndex = closes.length - 1;
-        const futureDates = nextBusinessDays(new Date(series[series.length - 1].date), horizonDays);
-        const forecast: ForecastPoint[] = futureDates.map((date, i) => {
-          const x = lastIndex + (i + 1);
-          const predicted = m * x + b;
-          return { date, predicted: Number(predicted.toFixed(2)) };
-        });
-        const expectedChangePct = forecast.length
-          ? (forecast[forecast.length - 1].predicted - lastClose) / lastClose
-          : 0;
-
-        results.push({
-          symbol,
-          history: series,
-          forecast,
-          metrics: {
-            lastClose: Number(lastClose.toFixed(2)),
-            trend,
-            expectedChangePct: Number((expectedChangePct * 100).toFixed(2)),
-            volatility: Number((vol * 100).toFixed(2)),
-          },
-        });
-      } catch (err) {
-        console.error(`Failed ticker ${symbol}:`, err);
-        results.push({
-          symbol,
-          history: [],
-          forecast: [],
-          metrics: { lastClose: 0, trend: "flat", expectedChangePct: 0, volatility: 0 },
-        });
-      }
+for (const symbol of unique) {
+  try {
+    const series = await fetchSeries(symbol);
+    if (!series.length) throw new Error("Empty series");
+    const closes = series.map((s) => s.close);
+    const lastClose = closes[closes.length - 1];
+    if (!Number.isFinite(lastClose)) throw new Error("Invalid last close");
+    const returns = [] as number[];
+    for (let i = 1; i < closes.length; i++) {
+      const r = (closes[i] - closes[i - 1]) / closes[i - 1];
+      if (Number.isFinite(r)) returns.push(r);
     }
+    const vol = stdDev(returns);
+    const { m, b } = linearRegression(closes);
+    const trend: "up" | "down" | "flat" = m > 0 ? "up" : m < 0 ? "down" : "flat";
+    const lastIndex = closes.length - 1;
+    const lastDateStr = series[series.length - 1]?.date;
+    const baseDate = lastDateStr ? new Date(`${lastDateStr}T00:00:00`) : new Date();
+    const futureDates = nextBusinessDays(baseDate, horizonDays);
+    const forecast: ForecastPoint[] = futureDates.map((date, i) => {
+      const x = lastIndex + (i + 1);
+      const predicted = m * x + b;
+      return { date, predicted: Number(predicted.toFixed(2)) };
+    });
+    const expectedChangePct = forecast.length && lastClose
+      ? (forecast[forecast.length - 1].predicted - lastClose) / lastClose
+      : 0;
+
+    results.push({
+      symbol,
+      history: series,
+      forecast,
+      metrics: {
+        lastClose: Number(lastClose.toFixed(2)),
+        trend,
+        expectedChangePct: Number((expectedChangePct * 100).toFixed(2)),
+        volatility: Number((vol * 100).toFixed(2)),
+      },
+    });
+  } catch (err) {
+    console.error(`Failed ticker ${symbol}:`, err);
+    results.push({
+      symbol,
+      history: [],
+      forecast: [],
+      metrics: { lastClose: 0, trend: "flat", expectedChangePct: 0, volatility: 0 },
+    });
+  }
+}
 
     return new Response(
       JSON.stringify({ tickers: results }),
