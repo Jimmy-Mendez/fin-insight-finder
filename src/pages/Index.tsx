@@ -492,6 +492,16 @@ const Index = () => {
                             </div>
                           ))
                         )}
+                        {askLoading && (
+                          <div className="text-sm animate-fade-in">
+                            <span className="inline-flex items-center gap-1 rounded-md px-3 py-2 bg-muted">
+                              <span className="sr-only">Assistant is thinking</span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/70 animate-pulse"></span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/70 animate-pulse"></span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/70 animate-pulse"></span>
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </ScrollArea>
                   </div>
