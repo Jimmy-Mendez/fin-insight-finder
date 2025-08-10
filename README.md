@@ -43,4 +43,4 @@ npm run build
 Deploy the generated assets in `dist/` to your hosting provider and deploy the Supabase functions with the Supabase CLI.
 
 ---
-This project was generated with Lovable and is intended for educational and experimental use.
+Deployment: https://fin-insight-finder.lovable.app/
