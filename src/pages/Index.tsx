@@ -464,46 +464,50 @@ const Index = () => {
 
         <div className="grid md:grid-cols-2 gap-6">
           <Card>
-            <CardHeader className="flex items-center justify-between">
-              <CardTitle>Document Queue</CardTitle>
-              <Button variant="secondary" size="sm" className="hover-scale ml-auto" onClick={() => document.getElementById('file-input')?.click()}>
-                Upload PDFs
-              </Button>
-              <Dialog open={kbOpen} onOpenChange={(open) => { setKbOpen(open); if (open) void fetchKnowledgeDocs(); }}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="hover-scale">Knowledge Base</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Knowledge Base</DialogTitle>
-                    <DialogDescription>All indexed documents</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-3">
-                    {kbLoading ? (
-                      <p className="text-sm text-muted-foreground animate-fade-in">Loading…</p>
-                    ) : kbDocs.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No documents found.</p>
-                    ) : (
-                      <ScrollArea className="h-64 pr-3">
-                        <ul className="space-y-2">
-                          {kbDocs.map((d: any) => (
-                            <li key={d.id} className="border rounded-md p-3">
-                              <div className="flex items-center justify-between">
-                                <div className="min-w-0">
-                                  <p className="font-medium truncate">{d.title}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {(d.source || "upload")} • {(d.metadata?.pages ?? "?")} pages{d.metadata?.size ? ` • ${(d.metadata.size / (1024*1024)).toFixed(2)} MB` : ""}
-                                  </p>
-                                </div>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      </ScrollArea>
-                    )}
-                  </div>
-                </DialogContent>
-              </Dialog>
+            <CardHeader>
+              <div className="flex flex-col items-center w-full gap-2">
+                <CardTitle>Document Queue</CardTitle>
+                <div className="flex items-center justify-center gap-2">
+                  <Button variant="secondary" size="sm" className="hover-scale" onClick={() => document.getElementById('file-input')?.click()}>
+                    Upload PDFs
+                  </Button>
+                  <Dialog open={kbOpen} onOpenChange={(open) => { setKbOpen(open); if (open) void fetchKnowledgeDocs(); }}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="hover-scale">Knowledge Base</Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Knowledge Base</DialogTitle>
+                        <DialogDescription>All indexed documents</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-3">
+                        {kbLoading ? (
+                          <p className="text-sm text-muted-foreground animate-fade-in">Loading…</p>
+                        ) : kbDocs.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No documents found.</p>
+                        ) : (
+                          <ScrollArea className="h-64 pr-3">
+                            <ul className="space-y-2">
+                              {kbDocs.map((d: any) => (
+                                <li key={d.id} className="border rounded-md p-3">
+                                  <div className="flex items-center justify-between">
+                                    <div className="min-w-0">
+                                      <p className="font-medium truncate">{d.title}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {(d.source || "upload")} • {(d.metadata?.pages ?? "?")} pages{d.metadata?.size ? ` • ${(d.metadata.size / (1024*1024)).toFixed(2)} MB` : ""}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          </ScrollArea>
+                        )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               {docs.length === 0 ? (
