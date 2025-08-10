@@ -1,16 +1,13 @@
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
-// Vite-friendly worker import
-// The ?url suffix makes Vite return the URL string for the asset
-// pdfjs 4 uses build/pdf.worker.min.js path
-// If this path changes in future versions, update accordingly
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.js?url";
+// Use Vite worker import for pdf.js worker
+import PdfWorker from "pdfjs-dist/build/pdf.worker.mjs?worker";
 
 let workerConfigured = false;
 
 function ensureWorker() {
   if (!workerConfigured) {
-    // @ts-ignore - pdfjs types may not include workerSrc
-    GlobalWorkerOptions.workerSrc = workerUrl;
+    // @ts-ignore - pdfjs types may not include workerPort yet
+    GlobalWorkerOptions.workerPort = new PdfWorker();
     workerConfigured = true;
   }
 }
