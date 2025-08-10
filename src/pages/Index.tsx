@@ -370,11 +370,10 @@ const Index = () => {
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="qa" className="w-full">
-                <TabsList className="grid grid-cols-4">
-                  <TabsTrigger value="qa">Q&A</TabsTrigger>
+                <TabsList className="grid grid-cols-3">
+                  <TabsTrigger value="qa">Q&amp;A</TabsTrigger>
                   <TabsTrigger value="sentiment">Sentiment</TabsTrigger>
                   <TabsTrigger value="anomalies">Anomalies</TabsTrigger>
-                  <TabsTrigger value="forecasting">Forecasting</TabsTrigger>
                 </TabsList>
                 <TabsContent value="qa" className="space-y-4">
                   <form onSubmit={handleAsk} className="space-y-3">
@@ -404,24 +403,29 @@ const Index = () => {
                   </div>
                   <AnomaliesResults anomalies={anomaliesResults} />
                 </TabsContent>
-                <TabsContent value="forecasting" className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <Input
-                      placeholder="Tickers (comma separated)"
-                      value={tickersInput}
-                      onChange={(e) => setTickersInput(e.target.value)}
-                    />
-                    <Button variant="secondary" onClick={handleForecast} disabled={forecastLoading}>
-                      {forecastLoading ? "Forecasting..." : "Run Forecast"}
-                    </Button>
-                    <Button onClick={handleAnalyze} disabled={analyzeLoading}>
-                      {analyzeLoading ? "Analyzing..." : "Analyze Strategy"}
-                    </Button>
-                  </div>
-                  <ForecastResults data={forecastResults} />
-                  <StrategyResults results={strategyResults} />
-                </TabsContent>
               </Tabs>
+            </CardContent>
+          </Card>
+          <Card id="forecast">
+            <CardHeader>
+              <CardTitle>Forecasting & Strategy</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Input
+                  placeholder="Tickers (comma separated)"
+                  value={tickersInput}
+                  onChange={(e) => setTickersInput(e.target.value)}
+                />
+                <Button variant="secondary" onClick={handleForecast} disabled={forecastLoading}>
+                  {forecastLoading ? "Forecasting..." : "Run Forecast"}
+                </Button>
+                <Button onClick={handleAnalyze} disabled={analyzeLoading}>
+                  {analyzeLoading ? "Analyzing..." : "Analyze Strategy"}
+                </Button>
+              </div>
+              <ForecastResults data={forecastResults} />
+              <StrategyResults results={strategyResults} />
             </CardContent>
           </Card>
         </div>
