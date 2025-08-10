@@ -15,6 +15,7 @@ import { AnomaliesResults } from "@/components/AnomaliesResults";
 import { ForecastResults } from "@/components/ForecastResults";
 import { StrategyResults } from "@/components/StrategyResults";
 interface LocalDoc {
+  id?: string;
   name: string;
   size: number;
   progress: number;
@@ -35,6 +36,7 @@ const Index = () => {
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
   const [strategyResults, setStrategyResults] = useState<any[] | null>(null);
   const [suggestedTickers, setSuggestedTickers] = useState<string[]>([]);
+  const [summarizingDoc, setSummarizingDoc] = useState<string | null>(null);
   const totalSize = useMemo(() => docs.reduce((a, d) => a + d.size, 0), [docs]);
 
   const updateDoc = (name: string, update: Partial<LocalDoc>) => {
@@ -129,6 +131,7 @@ const Index = () => {
         }
 
         setCurrentDocId(doc.id);
+        updateDoc(file.name, { id: doc.id });
 
         const chunks = chunkText(text, 1500, 200);
         toast({ title: `Indexing ${file.name}`, description: `${chunks.length} chunks` });
@@ -192,6 +195,32 @@ const Index = () => {
     } catch (err: any) {
       console.error("Q&A error", err);
       toast({ title: "Error", description: err?.message || "Failed to get answer", variant: "destructive" });
+    }
+  };
+
+  const handleSummarize = async (doc: LocalDoc) => {
+    try {
+      if (!doc.id) {
+        toast({ title: "Not ready", description: "Please finish indexing before summarizing.", variant: "destructive" });
+        return;
+      }
+      setSummarizingDoc(doc.id);
+      toast({ title: "Summarizing", description: `Generating summary for ${doc.name}...` });
+      const { data, error } = await supabase.functions.invoke("generate-answer", {
+        body: {
+          question: "Provide a concise executive summary focusing on key financial metrics, risks, and outlook. Use up to 5 short bullet points.",
+          document_id: doc.id,
+          top_k: 12,
+        },
+      });
+      if (error) throw error;
+      const summary: string = (data as any)?.answer ?? "No summary returned.";
+      toast({ title: `Summary: ${doc.name}` , description: summary });
+    } catch (err: any) {
+      console.error("Summarize error", err);
+      toast({ title: "Error", description: err?.message || "Failed to summarize document", variant: "destructive" });
+    } finally {
+      setSummarizingDoc(null);
     }
   };
 
@@ -393,7 +422,17 @@ const Index = () => {
                     <li key={`${d.name}-${i}`} className="border rounded-md p-3">
                       <div className="flex items-center justify-between">
                         <span className="truncate mr-3">{d.name}</span>
-                        <span className="text-xs text-muted-foreground">{(d.size / (1024*1024)).toFixed(2)} MB</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">{(d.size / (1024*1024)).toFixed(2)} MB</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleSummarize(d)}
+                            disabled={!d.id || d.progress < 100 || summarizingDoc === d.id}
+                          >
+                            {summarizingDoc === d.id ? "Summarizing..." : "Summarize"}
+                          </Button>
+                        </div>
                       </div>
                       <div className="mt-2 space-y-1">
                         <Progress value={d.progress} />
