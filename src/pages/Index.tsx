@@ -442,7 +442,7 @@ const Index = () => {
               <span className="gradient-text">Financial RAG Analyst</span>
             </h1>
             <p className="text-base md:text-lg text-muted-foreground">
-              SEC filings to insights: Q&A, sentiment, and anomaly detection for earnings reports and press releases.
+              Financial Documents to insights: Q&A, sentiment, and anomaly detection for earnings reports and press releases.
             </p>
           </div>
           <GradientOrb />
