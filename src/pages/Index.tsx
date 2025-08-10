@@ -214,7 +214,7 @@ const Index = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke("generate-answer", {
-        body: { question: q, document_id: currentDocId ?? undefined, top_k: 12 },
+        body: { question: q, document_id: currentDocId ?? undefined, top_k: 3 },
       });
       if (error) throw error;
       const resp = data as any;
