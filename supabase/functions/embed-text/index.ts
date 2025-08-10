@@ -51,19 +51,36 @@ serve(async (req) => {
       });
     }
 
-    const resp = await fetch(`https://api-inference.huggingface.co/models/${MODEL_ID}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${hfKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ inputs: arr, options: { wait_for_model: true } }),
-    });
+    // Call HF with small retry for cold starts / rate limits
+    const maxRetries = 3;
+    let resp: Response | null = null;
+    let attempt = 0;
+    while (attempt < maxRetries) {
+      attempt++;
+      resp = await fetch(`https://api-inference.huggingface.co/models/${MODEL_ID}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${hfKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ inputs: arr, options: { wait_for_model: true } }),
+      });
 
-    if (!resp.ok) {
-      const err = await resp.text();
+      if (resp.ok) break;
+
+      // Retry on common transient statuses
+      if ([429, 500, 502, 503, 504].includes(resp.status)) {
+        const delay = 400 * attempt; // 400ms, 800ms, 1200ms
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      break;
+    }
+
+    if (!resp || !resp.ok) {
+      const err = resp ? await resp.text() : "no response";
       console.error("HF error:", err);
-      return new Response(JSON.stringify({ error: "Hugging Face request failed" }), {
+      return new Response(JSON.stringify({ error: "Hugging Face request failed", details: err }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
