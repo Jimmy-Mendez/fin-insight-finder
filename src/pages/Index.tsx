@@ -25,6 +25,14 @@ interface LocalDoc {
   status?: string;
 }
 
+interface Citation {
+  id: string;
+  document_id: string;
+  chunk_index: number;
+  similarity: number;
+  content: string;
+}
+
 const Index = () => {
   const [docs, setDocs] = useState<LocalDoc[]>([]);
   const [question, setQuestion] = useState("");
@@ -40,11 +48,12 @@ const Index = () => {
   const [strategyResults, setStrategyResults] = useState<any[] | null>(null);
   const [suggestedTickers, setSuggestedTickers] = useState<string[]>([]);
   const [summarizingDoc, setSummarizingDoc] = useState<string | null>(null);
-  const [qaMessages, setQaMessages] = useState<{ role: "user" | "assistant" | "system"; content: string }[]>([]);
+  const [qaMessages, setQaMessages] = useState<{ role: "user" | "assistant" | "system"; content: string; citations?: Citation[] }[]>([]);
   const [askLoading, setAskLoading] = useState(false);
   const [kbOpen, setKbOpen] = useState(false);
   const [kbLoading, setKbLoading] = useState(false);
   const [kbDocs, setKbDocs] = useState<any[]>([]);
+  const [docTitles, setDocTitles] = useState<Record<string, string>>({});
   const totalSize = useMemo(() => docs.reduce((a, d) => a + d.size, 0), [docs]);
 
   const updateDoc = (name: string, update: Partial<LocalDoc>) => {
@@ -208,8 +217,27 @@ const Index = () => {
         body: { question: q, document_id: currentDocId ?? undefined, top_k: 12 },
       });
       if (error) throw error;
-      const answer: string = (data as any)?.answer ?? "No answer returned.";
-      setQaMessages((prev) => [...prev, { role: "assistant", content: answer }]);
+      const resp = data as any;
+      const answer: string = resp?.answer ?? "No answer returned.";
+      const citations: Citation[] = (resp?.citations ?? []) as Citation[];
+      const ids = Array.from(new Set(citations.map((c) => c.document_id).filter(Boolean)));
+      if (ids.length > 0) {
+        const missing = ids.filter((id) => !(id in docTitles));
+        if (missing.length > 0) {
+          const { data: docsData, error: docsErr } = await supabase
+            .from("documents")
+            .select("id,title")
+            .in("id", missing as any);
+          if (!docsErr && docsData) {
+            const map: Record<string, string> = {};
+            (docsData as any[]).forEach((d) => {
+              map[d.id] = d.title;
+            });
+            setDocTitles((prev) => ({ ...prev, ...map }));
+          }
+        }
+      }
+      setQaMessages((prev) => [...prev, { role: "assistant", content: answer, citations }]);
     } catch (err: any) {
       console.error("Q&A error", err);
       setQaMessages((prev) => [...prev, { role: "system", content: err?.message || "Failed to get answer" }]);
@@ -569,7 +597,33 @@ const Index = () => {
                                 m.role === "system" ? "text-amber-600 dark:text-amber-400" : "",
                               ].join(" ")}
                             >
-                              <span className="inline-block rounded-md px-3 py-2 bg-muted">{m.content}</span>
+                              <div className="inline-flex flex-col gap-1">
+                                <span className="inline-block rounded-md px-3 py-2 bg-muted">{m.content}</span>
+                                {m.role === "assistant" && m.citations?.length ? (
+                                  <Dialog>
+                                    <DialogTrigger asChild>
+                                      <Button variant="link" size="sm" className="px-2 h-auto">
+                                        View sources ({m.citations.length})
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                      <DialogHeader>
+                                        <DialogTitle>Answer sources</DialogTitle>
+                                        <DialogDescription>Documents used to generate this answer</DialogDescription>
+                                      </DialogHeader>
+                                      <div className="space-y-3">
+                                        {Array.from(
+                                          new Map((m.citations as Citation[]).map((c) => [c.document_id, c])).keys()
+                                        ).map((docId) => (
+                                          <div key={docId} className="text-sm">
+                                            <div className="font-medium">{docTitles[docId] ?? docId}</div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </DialogContent>
+                                  </Dialog>
+                                ) : null}
+                              </div>
                             </div>
                           ))
                         )}
