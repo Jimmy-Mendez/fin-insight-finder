@@ -37,6 +37,7 @@ const Index = () => {
   };
 
   const processUploads = async (files: File[]) => {
+    let success = 0;
     for (const file of files) {
       try {
         toast({ title: `Extracting ${file.name}...` });
@@ -90,11 +91,13 @@ const Index = () => {
         }
 
         toast({ title: "Document indexed", description: file.name });
+        success++;
       } catch (e) {
         console.error("Process upload error:", e);
         toast({ title: "Processing failed", description: file.name, variant: "destructive" });
       }
     }
+    toast({ title: "Indexing complete", description: `${success} of ${files.length} document(s) indexed. Ready for Q&A.` });
   };
 
   const handleAsk = async (e: React.FormEvent) => {
