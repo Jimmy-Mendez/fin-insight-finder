@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.analyze-anomalies]
 verify_jwt = false
+
+[functions.forecast-stocks]
+verify_jwt = false

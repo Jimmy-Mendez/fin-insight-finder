@@ -12,6 +12,7 @@ import { extractPdfText } from "@/lib/pdf";
 import { chunkText } from "@/lib/chunk";
 import { SentimentResults } from "@/components/SentimentResults";
 import { AnomaliesResults } from "@/components/AnomaliesResults";
+import { ForecastResults } from "@/components/ForecastResults";
 interface LocalDoc {
   name: string;
   size: number;
@@ -27,6 +28,9 @@ const Index = () => {
   const [sentimentResults, setSentimentResults] = useState<{ companies: { name: string; score: number; documents: string[]; count?: number }[] } | null>(null);
   const [anomaliesLoading, setAnomaliesLoading] = useState(false);
   const [anomaliesResults, setAnomaliesResults] = useState<any[] | null>(null);
+  const [tickersInput, setTickersInput] = useState("WMT,MCD,ADBE");
+  const [forecastLoading, setForecastLoading] = useState(false);
+  const [forecastResults, setForecastResults] = useState<any | null>(null);
 
   const totalSize = useMemo(() => docs.reduce((a, d) => a + d.size, 0), [docs]);
 
@@ -175,6 +179,31 @@ const Index = () => {
     }
   };
 
+  const handleForecast = async () => {
+    try {
+      setForecastLoading(true);
+      setForecastResults(null);
+      const tickers = tickersInput
+        .split(/[\s,]+/)
+        .map((t) => t.trim().toUpperCase())
+        .filter(Boolean);
+      if (tickers.length === 0) {
+        toast({ title: "No tickers", description: "Please enter at least one ticker.", variant: "destructive" });
+        return;
+      }
+      toast({ title: "Fetching market data", description: `Running 30d forecast for ${tickers.join(", ")}` });
+      const { data, error } = await supabase.functions.invoke("forecast-stocks", { body: { tickers } });
+      if (error) throw error;
+      setForecastResults(data as any);
+      toast({ title: "Forecast complete", description: "Charts and metrics are ready." });
+    } catch (err: any) {
+      console.error("Forecast error", err);
+      toast({ title: "Error", description: err?.message || "Failed to run forecast", variant: "destructive" });
+    } finally {
+      setForecastLoading(false);
+    }
+  };
+
   return (
     <main className="min-h-screen py-16">
       <section className="container mx-auto max-w-5xl px-4">
@@ -244,10 +273,11 @@ const Index = () => {
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="qa" className="w-full">
-                <TabsList className="grid grid-cols-3">
+                <TabsList className="grid grid-cols-4">
                   <TabsTrigger value="qa">Q&A</TabsTrigger>
                   <TabsTrigger value="sentiment">Sentiment</TabsTrigger>
                   <TabsTrigger value="anomalies">Anomalies</TabsTrigger>
+                  <TabsTrigger value="forecasting">Forecasting</TabsTrigger>
                 </TabsList>
                 <TabsContent value="qa" className="space-y-4">
                   <form onSubmit={handleAsk} className="space-y-3">
@@ -276,6 +306,19 @@ const Index = () => {
                     </Button>
                   </div>
                   <AnomaliesResults anomalies={anomaliesResults} />
+                </TabsContent>
+                <TabsContent value="forecasting" className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <Input
+                      placeholder="Tickers (comma separated)"
+                      value={tickersInput}
+                      onChange={(e) => setTickersInput(e.target.value)}
+                    />
+                    <Button variant="secondary" onClick={handleForecast} disabled={forecastLoading}>
+                      {forecastLoading ? "Forecasting..." : "Run Forecast"}
+                    </Button>
+                  </div>
+                  <ForecastResults data={forecastResults} />
                 </TabsContent>
               </Tabs>
             </CardContent>
