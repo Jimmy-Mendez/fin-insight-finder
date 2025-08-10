@@ -14,6 +14,7 @@ import { SentimentResults } from "@/components/SentimentResults";
 import { AnomaliesResults } from "@/components/AnomaliesResults";
 import { ForecastResults } from "@/components/ForecastResults";
 import { StrategyResults } from "@/components/StrategyResults";
+import { ScrollArea } from "@/components/ui/scroll-area";
 interface LocalDoc {
   id?: string;
   name: string;
@@ -37,6 +38,8 @@ const Index = () => {
   const [strategyResults, setStrategyResults] = useState<any[] | null>(null);
   const [suggestedTickers, setSuggestedTickers] = useState<string[]>([]);
   const [summarizingDoc, setSummarizingDoc] = useState<string | null>(null);
+  const [qaMessages, setQaMessages] = useState<{ role: "user" | "assistant" | "system"; content: string }[]>([]);
+  const [askLoading, setAskLoading] = useState(false);
   const totalSize = useMemo(() => docs.reduce((a, d) => a + d.size, 0), [docs]);
 
   const updateDoc = (name: string, update: Partial<LocalDoc>) => {
@@ -184,17 +187,24 @@ const Index = () => {
     e.preventDefault();
     const q = question.trim();
     if (!q) return;
-    toast({ title: "Asking OpenAI...", description: "Generating answer" });
+
+    // Append user message and clear input
+    setQaMessages((prev) => [...prev, { role: "user", content: q }]);
+    setQuestion("");
+    setAskLoading(true);
+
     try {
       const { data, error } = await supabase.functions.invoke("generate-answer", {
         body: { question: q, document_id: currentDocId ?? undefined, top_k: 12 },
       });
       if (error) throw error;
-      const answer: string = data?.answer ?? "No answer returned.";
-      toast({ title: "Answer", description: answer });
+      const answer: string = (data as any)?.answer ?? "No answer returned.";
+      setQaMessages((prev) => [...prev, { role: "assistant", content: answer }]);
     } catch (err: any) {
       console.error("Q&A error", err);
-      toast({ title: "Error", description: err?.message || "Failed to get answer", variant: "destructive" });
+      setQaMessages((prev) => [...prev, { role: "system", content: err?.message || "Failed to get answer" }]);
+    } finally {
+      setAskLoading(false);
     }
   };
 
@@ -463,13 +473,37 @@ const Index = () => {
                   <TabsTrigger value="anomalies">Anomalies</TabsTrigger>
                 </TabsList>
                 <TabsContent value="qa" className="space-y-4">
-                  <form onSubmit={handleAsk} className="space-y-3">
+                  <div className="border rounded-md">
+                    <ScrollArea className="h-64 p-3">
+                      <div className="space-y-2">
+                        {qaMessages.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">Ask a question about your uploaded documents.</p>
+                        ) : (
+                          qaMessages.map((m, idx) => (
+                            <div
+                              key={idx}
+                              className={[
+                                "text-sm",
+                                m.role === "user" ? "text-right" : "",
+                                m.role === "system" ? "text-amber-600 dark:text-amber-400" : "",
+                              ].join(" ")}
+                            >
+                              <span className="inline-block rounded-md px-3 py-2 bg-muted">{m.content}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                  <form onSubmit={handleAsk} className="flex items-center gap-2">
                     <Input
                       placeholder="E.g. What was total revenue this quarter?"
                       value={question}
                       onChange={(e) => setQuestion(e.target.value)}
                     />
-                    <Button type="submit">Ask</Button>
+                    <Button type="submit" disabled={askLoading || !question.trim()}>
+                      {askLoading ? "Asking..." : "Ask"}
+                    </Button>
                   </form>
                 </TabsContent>
                 <TabsContent value="sentiment" className="space-y-4">
