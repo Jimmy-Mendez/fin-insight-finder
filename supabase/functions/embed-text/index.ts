@@ -57,7 +57,7 @@ serve(async (req) => {
     let attempt = 0;
     while (attempt < maxRetries) {
       attempt++;
-      resp = await fetch(`https://api-inference.huggingface.co/models/${MODEL_ID}`, {
+      resp = await fetch(`https://api-inference.huggingface.co/pipeline/feature-extraction/${MODEL_ID}`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${hfKey}`,
