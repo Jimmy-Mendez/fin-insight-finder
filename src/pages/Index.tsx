@@ -17,6 +17,7 @@ interface LocalDoc {
 const Index = () => {
   const [docs, setDocs] = useState<LocalDoc[]>([]);
   const [question, setQuestion] = useState("");
+  const [currentDocId, setCurrentDocId] = useState<string | null>(null);
 
   const totalSize = useMemo(() => docs.reduce((a, d) => a + d.size, 0), [docs]);
 
@@ -57,6 +58,8 @@ const Index = () => {
           continue;
         }
 
+        setCurrentDocId(doc.id);
+
         const chunks = chunkText(text, 1500, 200);
         toast({ title: `Indexing ${file.name}`, description: `${chunks.length} chunks` });
 
@@ -64,7 +67,7 @@ const Index = () => {
         for (let i = 0; i < chunks.length; i += batchSize) {
           const slice = chunks.slice(i, i + batchSize);
           const { data: embedData, error: embedErr } = await supabase.functions.invoke("embed-text", {
-            body: { texts: slice },
+            body: { texts: slice.map((t) => `passage: ${t}`) },
           });
           if (embedErr || !embedData?.embeddings) {
             console.error("embed-text error:", embedErr || embedData);
@@ -101,7 +104,7 @@ const Index = () => {
     toast({ title: "Asking OpenAI...", description: "Generating answer" });
     try {
       const { data, error } = await supabase.functions.invoke("generate-answer", {
-        body: { question: q },
+        body: { question: q, document_id: currentDocId ?? undefined, top_k: 12 },
       });
       if (error) throw error;
       const answer: string = data?.answer ?? "No answer returned.";

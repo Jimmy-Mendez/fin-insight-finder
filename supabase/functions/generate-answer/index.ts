@@ -37,9 +37,10 @@ serve(async (req) => {
       auth: { persistSession: false },
     });
 
-    // 1) Create question embedding
+    // 1) Create question embedding (prefix for BGE/E5 models)
+    const embedInput = `query: ${question}`;
     const { data: embedData, error: embedErr } = await supabase.functions.invoke("embed-text", {
-      body: { texts: [question] },
+      body: { texts: [embedInput] },
     });
     if (embedErr || !embedData?.embeddings?.[0]) {
       console.error("embed-text error:", embedErr || embedData);
