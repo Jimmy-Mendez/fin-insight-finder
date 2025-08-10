@@ -34,10 +34,53 @@ const Index = () => {
   const [forecastResults, setForecastResults] = useState<any | null>(null);
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
   const [strategyResults, setStrategyResults] = useState<any[] | null>(null);
+  const [suggestedTickers, setSuggestedTickers] = useState<string[]>([]);
   const totalSize = useMemo(() => docs.reduce((a, d) => a + d.size, 0), [docs]);
 
   const updateDoc = (name: string, update: Partial<LocalDoc>) => {
     setDocs(prev => prev.map(d => (d.name === name ? { ...d, ...update } : d)));
+  };
+
+  const extractTickers = (text: string, fileName: string): string[] => {
+    const MAX_TEXT = 60000;
+    const sample = (text || "").slice(0, MAX_TEXT).toUpperCase();
+    const bad = new Set([
+      "SEC","USD","US","GAAP","EPS","EBITDA","NET","INCOME","LOSS","REVENUE","CASH","FLOW","BALANCE","SHEET",
+      "Q","Q1","Q2","Q3","Q4","FY","FYE","K","S","MD&A","ITEM","NOTE","NOTES","FORM","10Q","10-K","8-K","EXHIBIT","SERIES","CLASS"
+    ]);
+    const add = (tok: string, out: Set<string>) => {
+      const t = tok.toUpperCase().trim();
+      if (t.length >= 1 && t.length <= 5 && /^[A-Z]+$/.test(t) && !bad.has(t)) out.add(t);
+    };
+    const out = new Set<string>();
+
+    const patterns: RegExp[] = [
+      /TRADING SYMBOL\(S\)\s*:\s*([A-Z]{1,5})(?:\s*,\s*([A-Z]{1,5}))*?/g,
+      /\bTICKER(?:\s*SYMBOL)?\s*[:\-]\s*([A-Z]{1,5})\b/g,
+      /\bNASDAQ\s*:?[\s\-]*([A-Z]{1,5})\b/g,
+      /\bNYSE\s*:?[\s\-]*([A-Z]{1,5})\b/g,
+      /\bAMEX\s*:?[\s\-]*([A-Z]{1,5})\b/g
+    ];
+    for (const re of patterns) {
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(sample))) {
+        for (let i = 1; i < m.length; i++) if (m[i]) add(m[i], out);
+      }
+    }
+
+    const nameTokens = (fileName || "").toUpperCase().split(/[^A-Z]/).filter(Boolean);
+    for (const tok of nameTokens) add(tok, out);
+
+    return Array.from(out);
+  };
+
+  const addTickerToInput = (sym: string) => {
+    const s = sym.toUpperCase();
+    setTickersInput((prev) => {
+      const parts = prev.split(/[\s,]+/).filter(Boolean).map(t => t.toUpperCase());
+      if (parts.includes(s)) return prev;
+      return parts.length ? `${parts.join(",")},${s}` : s;
+    });
   };
 
   const onFiles = async (files: FileList | null) => {
@@ -66,6 +109,11 @@ const Index = () => {
           toast({ title: "No text found", description: file.name, variant: "destructive" });
           updateDoc(file.name, { status: "No text found" });
           continue;
+        }
+
+        const suggestions = extractTickers(text, file.name);
+        if (suggestions.length) {
+          setSuggestedTickers((prev) => Array.from(new Set([...prev, ...suggestions])));
         }
 
         const { data: doc, error: docErr } = await supabase
@@ -424,6 +472,16 @@ const Index = () => {
                   {analyzeLoading ? "Analyzing..." : "Analyze Strategy"}
                 </Button>
               </div>
+              {suggestedTickers.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground mr-1">Suggested from docs:</span>
+                  {suggestedTickers.map((s) => (
+                    <Button key={s} variant="outline" size="sm" onClick={() => addTickerToInput(s)}>
+                      {s}
+                    </Button>
+                  ))}
+                </div>
+              )}
               <ForecastResults data={forecastResults} />
               <StrategyResults results={strategyResults} />
             </CardContent>
