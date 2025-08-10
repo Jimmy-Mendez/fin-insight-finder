@@ -444,11 +444,6 @@ const Index = () => {
             <p className="text-base md:text-lg text-muted-foreground">
               SEC filings to insights: Q&A, sentiment, and anomaly detection for earnings reports and press releases.
             </p>
-            <div className="flex items-center justify-center gap-3 pt-2">
-              <Button variant="outline" size="lg" asChild>
-                <a href="#analyze">Analyze</a>
-              </Button>
-            </div>
           </div>
           <GradientOrb />
         </div>
