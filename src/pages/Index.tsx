@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { extractPdfText } from "@/lib/pdf";
 import { chunkText } from "@/lib/chunk";
 import { SentimentResults } from "@/components/SentimentResults";
+import { AnomaliesResults } from "@/components/AnomaliesResults";
 interface LocalDoc {
   name: string;
   size: number;
@@ -24,6 +25,8 @@ const Index = () => {
   const [currentDocId, setCurrentDocId] = useState<string | null>(null);
   const [sentimentLoading, setSentimentLoading] = useState(false);
   const [sentimentResults, setSentimentResults] = useState<{ companies: { name: string; score: number; documents: string[]; count?: number }[] } | null>(null);
+  const [anomaliesLoading, setAnomaliesLoading] = useState(false);
+  const [anomaliesResults, setAnomaliesResults] = useState<any[] | null>(null);
 
   const totalSize = useMemo(() => docs.reduce((a, d) => a + d.size, 0), [docs]);
 
@@ -155,8 +158,21 @@ const Index = () => {
     }
   };
 
-  const handleAnomalies = () => {
-    toast({ title: "Anomaly scan queued", description: "Will run once backend is connected." });
+  const handleAnomalies = async () => {
+    try {
+      setAnomaliesLoading(true);
+      setAnomaliesResults(null);
+      toast({ title: "Scanning anomalies", description: "Reviewing all documents for financial red flags..." });
+      const { data, error } = await supabase.functions.invoke("analyze-anomalies", { body: {} });
+      if (error) throw error;
+      setAnomaliesResults((data as any)?.anomalies ?? []);
+      toast({ title: "Anomaly scan complete", description: "Results are ready." });
+    } catch (err: any) {
+      console.error("Anomalies error", err);
+      toast({ title: "Error", description: err?.message || "Failed to scan anomalies", variant: "destructive" });
+    } finally {
+      setAnomaliesLoading(false);
+    }
   };
 
   return (
@@ -252,9 +268,14 @@ const Index = () => {
                   </div>
                   <SentimentResults results={sentimentResults} />
                 </TabsContent>
-                <TabsContent value="anomalies" className="space-y-3">
-                  <p className="text-sm text-muted-foreground">Spot unusual metric changes across periods.</p>
-                  <Button variant="secondary" onClick={handleAnomalies}>Scan Anomalies</Button>
+                <TabsContent value="anomalies" className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <p className="text-sm text-muted-foreground flex-1">Spot unusual metric changes across periods.</p>
+                    <Button variant="secondary" onClick={handleAnomalies} disabled={anomaliesLoading}>
+                      {anomaliesLoading ? "Scanning..." : "Scan Anomalies"}
+                    </Button>
+                  </div>
+                  <AnomaliesResults anomalies={anomaliesResults} />
                 </TabsContent>
               </Tabs>
             </CardContent>
