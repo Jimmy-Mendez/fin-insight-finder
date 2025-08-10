@@ -17,15 +17,21 @@ interface SeriesPoint { date: string; close: number }
 interface ForecastPoint { date: string; predicted: number }
 
 function parseDailySeries(json: any): SeriesPoint[] {
-  const ts = json["Time Series (Daily)"] || {};
-  const entries = Object.entries(ts) as [string, any][];
-  const data = entries.map(([date, obj]) => ({
-    date,
-    close: Number(obj["5. adjusted close"]) || Number(obj["4. close"]) || Number(obj["1. open"]) || 0,
-  }));
-  // sort ascending by date (YYYY-MM-DD string compare works)
-  data.sort((a, b) => a.date.localeCompare(b.date));
-  return data.filter((d) => Number.isFinite(d.close));
+  const res = json?.chart?.result?.[0];
+  if (!res) return [];
+  const ts: number[] | undefined = res.timestamp;
+  const adj: (number | null)[] | undefined = res.indicators?.adjclose?.[0]?.adjclose;
+  const close: (number | null)[] | undefined = res.indicators?.quote?.[0]?.close;
+  if (!ts || ts.length === 0) return [];
+  const out: SeriesPoint[] = [];
+  for (let i = 0; i < ts.length; i++) {
+    const c = (adj && adj[i] != null ? adj[i] : close?.[i]);
+    if (c == null || !Number.isFinite(c)) continue;
+    const date = new Date(ts[i] * 1000).toISOString().slice(0, 10);
+    out.push({ date, close: Number(c) });
+  }
+  out.sort((a, b) => a.date.localeCompare(b.date));
+  return out;
 }
 
 function linearRegression(y: number[]) {
@@ -61,12 +67,12 @@ function nextBusinessDays(start: Date, count: number): string[] {
 }
 
 async function fetchSeries(symbol: string) {
-  const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=${encodeURIComponent(symbol)}&outputsize=compact&apikey=${API_KEY}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`AlphaVantage error ${res.status}`);
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=2y&interval=1d&includeAdjustedClose=true`;
+  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (!res.ok) throw new Error(`Yahoo Finance error ${res.status}`);
   const json = await res.json();
-  if (json["Error Message"] || json["Note"]) {
-    throw new Error(json["Error Message"] || json["Note"] || "Unknown Alpha Vantage error");
+  if (json?.chart?.error) {
+    throw new Error(json.chart.error?.description || "Yahoo Finance error");
   }
   const parsed = parseDailySeries(json);
   if (!Array.isArray(parsed) || parsed.length === 0) {
@@ -81,7 +87,6 @@ serve(async (req) => {
   }
 
   try {
-    if (!API_KEY) throw new Error("Missing ALPHA_VANTAGE_API_KEY secret");
     const { tickers = ["WMT", "MCD", "ADBE"], horizonDays = 30 } = (await req.json().catch(() => ({}))) as ForecastRequestBody;
 
     const unique = Array.from(new Set(tickers.map(t => String(t).trim().toUpperCase()).filter(Boolean)));
