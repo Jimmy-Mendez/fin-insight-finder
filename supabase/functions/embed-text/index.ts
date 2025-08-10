@@ -57,8 +57,8 @@ serve(async (req) => {
     let attempt = 0;
     while (attempt < maxRetries) {
       attempt++;
-      // Try the embeddings endpoint first; fallback to feature-extraction if not found
-      resp = await fetch(`https://api-inference.huggingface.co/embeddings/${MODEL_ID}`, {
+      // Prefer the HF router feature-extraction endpoint per latest docs; fallback to API Inference
+      resp = await fetch(`https://router.huggingface.co/hf-inference/models/${MODEL_ID}/pipeline/feature-extraction`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${hfKey}`,
