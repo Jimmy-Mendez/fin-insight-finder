@@ -15,6 +15,7 @@ import { AnomaliesResults } from "@/components/AnomaliesResults";
 import { ForecastResults } from "@/components/ForecastResults";
 import { StrategyResults } from "@/components/StrategyResults";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import ReactMarkdown from "react-markdown";
 interface LocalDoc {
   id?: string;
   name: string;
@@ -230,7 +231,25 @@ const Index = () => {
       });
       if (error) throw error;
       const summary: string = (data as any)?.answer ?? "No summary returned.";
-      toast({ title: `Summary: ${doc.name}` , description: summary });
+      toast({
+        title: `Summary: ${doc.name}`,
+        description: (
+          <div className="text-sm">
+            <ReactMarkdown
+              components={{
+                ul: ({ node, ...props }) => <ul className="list-disc pl-5" {...props} />,
+                ol: ({ node, ...props }) => <ol className="list-decimal pl-5" {...props} />,
+                p: ({ node, ...props }) => <p className="mb-2" {...props} />,
+                a: ({ node, ...props }) => (
+                  <a {...props} target="_blank" rel="noopener noreferrer" className="underline" />
+                ),
+              }}
+            >
+              {summary}
+            </ReactMarkdown>
+          </div>
+        ),
+      });
     } catch (err: any) {
       console.error("Summarize error", err);
       toast({ title: "Error", description: err?.message || "Failed to summarize document", variant: "destructive" });
