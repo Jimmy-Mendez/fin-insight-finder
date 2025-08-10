@@ -57,7 +57,8 @@ serve(async (req) => {
     let attempt = 0;
     while (attempt < maxRetries) {
       attempt++;
-      resp = await fetch(`https://api-inference.huggingface.co/pipeline/feature-extraction/${MODEL_ID}`, {
+      // Try the embeddings endpoint first; fallback to feature-extraction if not found
+      resp = await fetch(`https://api-inference.huggingface.co/embeddings/${MODEL_ID}`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${hfKey}`,
@@ -65,6 +66,17 @@ serve(async (req) => {
         },
         body: JSON.stringify({ inputs: arr, options: { wait_for_model: true } }),
       });
+
+      if (!resp.ok && resp.status === 404) {
+        resp = await fetch(`https://api-inference.huggingface.co/pipeline/feature-extraction/${MODEL_ID}`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${hfKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ inputs: arr, options: { wait_for_model: true } }),
+        });
+      }
 
       if (resp.ok) break;
 
@@ -88,22 +100,43 @@ serve(async (req) => {
 
     const raw = await resp.json();
 
-    // Normalize output to batch of embeddings
+    // Normalize output to batch of embeddings from various HF formats
     let embeddings: number[][] = [];
-    if (Array.isArray(raw) && Array.isArray(raw[0]) && typeof raw[0][0] === "number") {
-      // Single input: tokens x dims
-      embeddings = [l2norm(meanPool(raw as number[][]))];
-    } else if (
-      Array.isArray(raw) &&
-      Array.isArray(raw[0]) &&
-      Array.isArray(raw[0][0]) &&
-      typeof raw[0][0][0] === "number"
-    ) {
-      // Batch: batch x tokens x dims
-      embeddings = (raw as number[][][]).map((tokens) => l2norm(meanPool(tokens)));
-    } else {
-      console.error("Unexpected HF output shape", raw);
-      return new Response(JSON.stringify({ error: "Unexpected embeddings format" }), {
+    try {
+      if (raw && Array.isArray(raw.embeddings)) {
+        // HF /embeddings may return { embeddings: number[] } or number[][]
+        if (raw.embeddings.length > 0 && typeof raw.embeddings[0] === "number") {
+          embeddings = [l2norm(raw.embeddings as number[])];
+        } else {
+          embeddings = (raw.embeddings as number[][]).map((e) => l2norm(e));
+        }
+      } else if (raw && Array.isArray(raw.data) && raw.data[0]?.embedding) {
+        // Some responses use { data: [{ embedding: number[] }, ...] }
+        embeddings = (raw.data as any[]).map((d) => l2norm(d.embedding as number[]));
+      } else if (Array.isArray(raw) && typeof raw[0] === "number") {
+        // Single flat vector
+        embeddings = [l2norm(raw as number[])];
+      } else if (Array.isArray(raw) && Array.isArray(raw[0]) && typeof raw[0][0] === "number") {
+        // Single input: tokens x dims (feature-extraction)
+        embeddings = [l2norm(meanPool(raw as number[][]))];
+      } else if (
+        Array.isArray(raw) &&
+        Array.isArray(raw[0]) &&
+        Array.isArray(raw[0][0]) &&
+        typeof raw[0][0][0] === "number"
+      ) {
+        // Batch: batch x tokens x dims (feature-extraction)
+        embeddings = (raw as number[][][]).map((tokens) => l2norm(meanPool(tokens)));
+      } else {
+        console.error("Unexpected HF output shape", raw);
+        return new Response(JSON.stringify({ error: "Unexpected embeddings format" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    } catch (e) {
+      console.error("Failed to parse HF embeddings:", e, raw);
+      return new Response(JSON.stringify({ error: "Failed to parse embeddings" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
