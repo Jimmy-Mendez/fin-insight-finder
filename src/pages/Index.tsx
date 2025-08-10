@@ -16,6 +16,7 @@ import { ForecastResults } from "@/components/ForecastResults";
 import { StrategyResults } from "@/components/StrategyResults";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ReactMarkdown from "react-markdown";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 interface LocalDoc {
   id?: string;
   name: string;
@@ -41,6 +42,9 @@ const Index = () => {
   const [summarizingDoc, setSummarizingDoc] = useState<string | null>(null);
   const [qaMessages, setQaMessages] = useState<{ role: "user" | "assistant" | "system"; content: string }[]>([]);
   const [askLoading, setAskLoading] = useState(false);
+  const [kbOpen, setKbOpen] = useState(false);
+  const [kbLoading, setKbLoading] = useState(false);
+  const [kbDocs, setKbDocs] = useState<any[]>([]);
   const totalSize = useMemo(() => docs.reduce((a, d) => a + d.size, 0), [docs]);
 
   const updateDoc = (name: string, update: Partial<LocalDoc>) => {
@@ -412,6 +416,23 @@ const Index = () => {
     }
   };
 
+  const fetchKnowledgeDocs = async () => {
+    try {
+      setKbLoading(true);
+      const { data, error } = await supabase
+        .from("documents")
+        .select("id,title,source,metadata,created_at")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setKbDocs(data ?? []);
+    } catch (err: any) {
+      console.error("KB load error", err);
+      toast({ title: "Error", description: err?.message || "Failed to load knowledge base", variant: "destructive" });
+    } finally {
+      setKbLoading(false);
+    }
+  };
+
   return (
     <main className="min-h-screen py-16">
       <section className="container mx-auto max-w-5xl px-4">
@@ -444,8 +465,43 @@ const Index = () => {
 
         <div className="grid md:grid-cols-2 gap-6">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex items-center justify-between">
               <CardTitle>Document Queue</CardTitle>
+              <Dialog open={kbOpen} onOpenChange={(open) => { setKbOpen(open); if (open) void fetchKnowledgeDocs(); }}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="hover-scale">Knowledge Base</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Knowledge Base</DialogTitle>
+                    <DialogDescription>All indexed documents</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    {kbLoading ? (
+                      <p className="text-sm text-muted-foreground animate-fade-in">Loading…</p>
+                    ) : kbDocs.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No documents found.</p>
+                    ) : (
+                      <ScrollArea className="h-64 pr-3">
+                        <ul className="space-y-2">
+                          {kbDocs.map((d: any) => (
+                            <li key={d.id} className="border rounded-md p-3">
+                              <div className="flex items-center justify-between">
+                                <div className="min-w-0">
+                                  <p className="font-medium truncate">{d.title}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {(d.source || "upload")} • {(d.metadata?.pages ?? "?")} pages{d.metadata?.size ? ` • ${(d.metadata.size / (1024*1024)).toFixed(2)} MB` : ""}
+                                  </p>
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </ScrollArea>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
             </CardHeader>
             <CardContent className="space-y-3">
               {docs.length === 0 ? (
