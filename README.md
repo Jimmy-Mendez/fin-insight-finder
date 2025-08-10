@@ -1,7 +1,7 @@
 # FinDocGPT
 ## Built as part of HACKNATION's Global AI Hackathon
 
-Fin Insight Finder is a web app for extracting insights from financial documents. Upload PDFs such as earnings reports or press releases and run AI powered tools to search, analyze sentiment, detect anomalies and forecast performance.
+FinDocGPT is a web app for extracting insights from financial documents. Upload PDFs such as earnings reports or press releases and run AI powered tools to search, analyze sentiment, detect anomalies and forecast performance.
 
 ## Features
 - **Document ingestion** – upload PDFs and automatically extract text and tickers.
