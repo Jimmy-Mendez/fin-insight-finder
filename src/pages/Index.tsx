@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { GradientOrb } from "@/components/GradientOrb";
@@ -12,6 +13,8 @@ import { chunkText } from "@/lib/chunk";
 interface LocalDoc {
   name: string;
   size: number;
+  progress: number;
+  status?: string;
 }
 
 const Index = () => {
@@ -20,6 +23,10 @@ const Index = () => {
   const [currentDocId, setCurrentDocId] = useState<string | null>(null);
 
   const totalSize = useMemo(() => docs.reduce((a, d) => a + d.size, 0), [docs]);
+
+  const updateDoc = (name: string, update: Partial<LocalDoc>) => {
+    setDocs(prev => prev.map(d => (d.name === name ? { ...d, ...update } : d)));
+  };
 
   const onFiles = async (files: FileList | null) => {
     if (!files) return;
@@ -30,7 +37,7 @@ const Index = () => {
     }
     setDocs(prev => [
       ...prev,
-      ...accepted.map(f => ({ name: f.name, size: f.size }))
+      ...accepted.map(f => ({ name: f.name, size: f.size, progress: 0, status: "Queued" }))
     ]);
     toast({ title: "Documents added", description: `${accepted.length} PDF(s) queued` });
     void processUploads(accepted);
@@ -41,9 +48,11 @@ const Index = () => {
     for (const file of files) {
       try {
         toast({ title: `Extracting ${file.name}...` });
+        updateDoc(file.name, { status: "Extracting...", progress: 5 });
         const { text, pages } = await extractPdfText(file);
         if (!text) {
           toast({ title: "No text found", description: file.name, variant: "destructive" });
+          updateDoc(file.name, { status: "No text found" });
           continue;
         }
 
@@ -63,6 +72,7 @@ const Index = () => {
 
         const chunks = chunkText(text, 1500, 200);
         toast({ title: `Indexing ${file.name}`, description: `${chunks.length} chunks` });
+        updateDoc(file.name, { status: `Indexing ${chunks.length} chunks...`, progress: 20 });
 
         const batchSize = 24;
         for (let i = 0; i < chunks.length; i += batchSize) {
@@ -73,6 +83,7 @@ const Index = () => {
           if (embedErr || !embedData?.embeddings) {
             console.error("embed-text error:", embedErr || embedData);
             toast({ title: "Embedding failed", description: file.name, variant: "destructive" });
+            updateDoc(file.name, { status: "Embedding failed" });
             break;
           }
           const embeddings: number[][] = embedData.embeddings as number[][];
@@ -86,15 +97,21 @@ const Index = () => {
           if (insErr) {
             console.error("Insert chunks error:", insErr);
             toast({ title: "Chunk insert failed", description: file.name, variant: "destructive" });
+            updateDoc(file.name, { status: "Error during chunk insert" });
             break;
           }
+          const completed = Math.min(i + slice.length, chunks.length);
+          const progress = Math.min(95, Math.round(20 + (completed / chunks.length) * 75));
+          updateDoc(file.name, { status: `Embedding ${completed}/${chunks.length}`, progress });
         }
 
         toast({ title: "Document indexed", description: file.name });
+        updateDoc(file.name, { status: "Indexed", progress: 100 });
         success++;
       } catch (e) {
         console.error("Process upload error:", e);
         toast({ title: "Processing failed", description: file.name, variant: "destructive" });
+        updateDoc(file.name, { status: "Processing failed" });
       }
     }
     toast({ title: "Indexing complete", description: `${success} of ${files.length} document(s) indexed. Ready for Q&A.` });
@@ -167,9 +184,18 @@ const Index = () => {
               ) : (
                 <ul className="space-y-2">
                   {docs.map((d, i) => (
-                    <li key={`${d.name}-${i}`} className="flex items-center justify-between border rounded-md p-3">
-                      <span className="truncate mr-3">{d.name}</span>
-                      <span className="text-xs text-muted-foreground">{(d.size / (1024*1024)).toFixed(2)} MB</span>
+                    <li key={`${d.name}-${i}`} className="border rounded-md p-3">
+                      <div className="flex items-center justify-between">
+                        <span className="truncate mr-3">{d.name}</span>
+                        <span className="text-xs text-muted-foreground">{(d.size / (1024*1024)).toFixed(2)} MB</span>
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        <Progress value={d.progress} />
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">{d.status}</span>
+                          <span className="text-xs">{Math.round(d.progress)}%</span>
+                        </div>
+                      </div>
                     </li>
                   ))}
                 </ul>
