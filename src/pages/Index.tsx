@@ -51,7 +51,9 @@ const Index = () => {
     const sample = (text || "").slice(0, MAX_TEXT).toUpperCase();
     const bad = new Set([
       "SEC","USD","US","GAAP","EPS","EBITDA","NET","INCOME","LOSS","REVENUE","CASH","FLOW","BALANCE","SHEET",
-      "Q","Q1","Q2","Q3","Q4","FY","FYE","K","S","MD&A","ITEM","NOTE","NOTES","FORM","10Q","10-K","8-K","EXHIBIT","SERIES","CLASS"
+      "Q","Q1","Q2","Q3","Q4","FY","FYE","K","S","MD&A","ITEM","NOTE","NOTES","FORM","10Q","10-K","8-K","EXHIBIT","SERIES","CLASS",
+      // Common filename noise
+      "PDF","DOC","DOCX","FINAL","DRAFT","REPORT","EARNINGS","TRANSCRIPT","CALL","PRESS","RELEASE","QUARTER","ANNUAL","V","V1","V2","V3"
     ]);
     const add = (tok: string, out: Set<string>) => {
       const t = tok.toUpperCase().trim();
@@ -73,8 +75,11 @@ const Index = () => {
       }
     }
 
-    const nameTokens = (fileName || "").toUpperCase().split(/[^A-Z]/).filter(Boolean);
-    for (const tok of nameTokens) add(tok, out);
+    // Only fall back to filename tokens if no tickers were found in content
+    if (out.size === 0) {
+      const nameTokens = (fileName || "").toUpperCase().split(/[^A-Z]/).filter(Boolean);
+      for (const tok of nameTokens) add(tok, out);
+    }
 
     return Array.from(out);
   };
