@@ -7,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { GradientOrb } from "@/components/GradientOrb";
 import { supabase } from "@/integrations/supabase/client";
-
+import { extractPdfText } from "@/lib/pdf";
+import { chunkText } from "@/lib/chunk";
 interface LocalDoc {
   name: string;
   size: number;
@@ -19,7 +20,7 @@ const Index = () => {
 
   const totalSize = useMemo(() => docs.reduce((a, d) => a + d.size, 0), [docs]);
 
-  const onFiles = (files: FileList | null) => {
+  const onFiles = async (files: FileList | null) => {
     if (!files) return;
     const accepted = Array.from(files).filter(f => f.type === "application/pdf");
     if (accepted.length === 0) {
@@ -31,6 +32,66 @@ const Index = () => {
       ...accepted.map(f => ({ name: f.name, size: f.size }))
     ]);
     toast({ title: "Documents added", description: `${accepted.length} PDF(s) queued` });
+    void processUploads(accepted);
+  };
+
+  const processUploads = async (files: File[]) => {
+    for (const file of files) {
+      try {
+        toast({ title: `Extracting ${file.name}...` });
+        const { text, pages } = await extractPdfText(file);
+        if (!text) {
+          toast({ title: "No text found", description: file.name, variant: "destructive" });
+          continue;
+        }
+
+        const { data: doc, error: docErr } = await supabase
+          .from("documents")
+          .insert({ title: file.name, source: "upload", metadata: { size: file.size, pages } })
+          .select()
+          .single();
+
+        if (docErr || !doc) {
+          console.error("Insert document error:", docErr);
+          toast({ title: "Failed to save document", description: file.name, variant: "destructive" });
+          continue;
+        }
+
+        const chunks = chunkText(text, 1500, 200);
+        toast({ title: `Indexing ${file.name}`, description: `${chunks.length} chunks` });
+
+        const batchSize = 24;
+        for (let i = 0; i < chunks.length; i += batchSize) {
+          const slice = chunks.slice(i, i + batchSize);
+          const { data: embedData, error: embedErr } = await supabase.functions.invoke("embed-text", {
+            body: { texts: slice },
+          });
+          if (embedErr || !embedData?.embeddings) {
+            console.error("embed-text error:", embedErr || embedData);
+            toast({ title: "Embedding failed", description: file.name, variant: "destructive" });
+            break;
+          }
+          const embeddings: number[][] = embedData.embeddings as number[][];
+          const rows = embeddings.map((emb, idx) => ({
+            document_id: doc.id,
+            chunk_index: i + idx,
+            content: slice[idx],
+            embedding: emb,
+          }));
+          const { error: insErr } = await supabase.from("document_chunks").insert(rows as any);
+          if (insErr) {
+            console.error("Insert chunks error:", insErr);
+            toast({ title: "Chunk insert failed", description: file.name, variant: "destructive" });
+            break;
+          }
+        }
+
+        toast({ title: "Document indexed", description: file.name });
+      } catch (e) {
+        console.error("Process upload error:", e);
+        toast({ title: "Processing failed", description: file.name, variant: "destructive" });
+      }
+    }
   };
 
   const handleAsk = async (e: React.FormEvent) => {
