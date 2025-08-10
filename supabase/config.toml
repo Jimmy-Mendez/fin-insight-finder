@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.embed-text]
 verify_jwt = false
+
+[functions.analyze-sentiment]
+verify_jwt = false

@@ -10,6 +10,7 @@ import { GradientOrb } from "@/components/GradientOrb";
 import { supabase } from "@/integrations/supabase/client";
 import { extractPdfText } from "@/lib/pdf";
 import { chunkText } from "@/lib/chunk";
+import { SentimentResults } from "@/components/SentimentResults";
 interface LocalDoc {
   name: string;
   size: number;
@@ -21,6 +22,8 @@ const Index = () => {
   const [docs, setDocs] = useState<LocalDoc[]>([]);
   const [question, setQuestion] = useState("");
   const [currentDocId, setCurrentDocId] = useState<string | null>(null);
+  const [sentimentLoading, setSentimentLoading] = useState(false);
+  const [sentimentResults, setSentimentResults] = useState<{ companies: { name: string; score: number; documents: string[]; count?: number }[] } | null>(null);
 
   const totalSize = useMemo(() => docs.reduce((a, d) => a + d.size, 0), [docs]);
 
@@ -135,8 +138,21 @@ const Index = () => {
     }
   };
 
-  const handleSentiment = () => {
-    toast({ title: "Sentiment queued", description: "Will run once backend is connected." });
+  const handleSentiment = async () => {
+    try {
+      setSentimentLoading(true);
+      setSentimentResults(null);
+      toast({ title: "Running sentiment", description: "Analyzing mentioned companies across all documents..." });
+      const { data, error } = await supabase.functions.invoke("analyze-sentiment", { body: {} });
+      if (error) throw error;
+      setSentimentResults(data as any);
+      toast({ title: "Sentiment complete", description: "Results are ready." });
+    } catch (err: any) {
+      console.error("Sentiment error", err);
+      toast({ title: "Error", description: err?.message || "Failed to run sentiment", variant: "destructive" });
+    } finally {
+      setSentimentLoading(false);
+    }
   };
 
   const handleAnomalies = () => {
@@ -227,9 +243,14 @@ const Index = () => {
                     <Button type="submit">Ask</Button>
                   </form>
                 </TabsContent>
-                <TabsContent value="sentiment" className="space-y-3">
-                  <p className="text-sm text-muted-foreground">Quantify tone in MD&A, earnings calls, and press releases.</p>
-                  <Button variant="secondary" onClick={handleSentiment}>Run Sentiment</Button>
+                <TabsContent value="sentiment" className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <p className="text-sm text-muted-foreground flex-1">Quantify tone in MD&A, earnings calls, and press releases.</p>
+                    <Button variant="secondary" onClick={handleSentiment} disabled={sentimentLoading}>
+                      {sentimentLoading ? "Running..." : "Run Sentiment"}
+                    </Button>
+                  </div>
+                  <SentimentResults results={sentimentResults} />
                 </TabsContent>
                 <TabsContent value="anomalies" className="space-y-3">
                   <p className="text-sm text-muted-foreground">Spot unusual metric changes across periods.</p>
