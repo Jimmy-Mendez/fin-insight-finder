@@ -445,7 +445,6 @@ const Index = () => {
               SEC filings to insights: Q&A, sentiment, and anomaly detection for earnings reports and press releases.
             </p>
             <div className="flex items-center justify-center gap-3 pt-2">
-              <Button variant="hero" size="lg" onClick={() => document.getElementById('file-input')?.click()}>Upload SEC PDFs</Button>
               <Button variant="outline" size="lg" asChild>
                 <a href="#analyze">Analyze</a>
               </Button>
@@ -467,6 +466,9 @@ const Index = () => {
           <Card>
             <CardHeader className="flex items-center justify-between">
               <CardTitle>Document Queue</CardTitle>
+              <Button variant="secondary" size="sm" className="hover-scale ml-auto" onClick={() => document.getElementById('file-input')?.click()}>
+                Upload PDFs
+              </Button>
               <Dialog open={kbOpen} onOpenChange={(open) => { setKbOpen(open); if (open) void fetchKnowledgeDocs(); }}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm" className="hover-scale">Knowledge Base</Button>
