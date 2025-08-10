@@ -76,7 +76,7 @@ serve(async (req) => {
       {
         role: "system",
         content:
-          "You are a financial analysis assistant for SEC filings. Use the provided CONTEXT to answer. If the answer isn't present, say you don't know. Be concise and cite figures directly.",
+          "You are a financial analysis assistant for SEC filings. Use the provided CONTEXT to answer. Be concise and cite figures directly.",
       },
       { role: "system", content: `CONTEXT:\n${retrievedContext}${context ? `\n\nEXTRA CONTEXT:\n${context}` : ""}` },
       { role: "user", content: question },
