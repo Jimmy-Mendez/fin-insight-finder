@@ -13,6 +13,7 @@ import { chunkText } from "@/lib/chunk";
 import { SentimentResults } from "@/components/SentimentResults";
 import { AnomaliesResults } from "@/components/AnomaliesResults";
 import { ForecastResults } from "@/components/ForecastResults";
+import { StrategyResults } from "@/components/StrategyResults";
 interface LocalDoc {
   name: string;
   size: number;
@@ -31,7 +32,8 @@ const Index = () => {
   const [tickersInput, setTickersInput] = useState("WMT,MCD,ADBE");
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastResults, setForecastResults] = useState<any | null>(null);
-
+  const [analyzeLoading, setAnalyzeLoading] = useState(false);
+  const [strategyResults, setStrategyResults] = useState<any[] | null>(null);
   const totalSize = useMemo(() => docs.reduce((a, d) => a + d.size, 0), [docs]);
 
   const updateDoc = (name: string, update: Partial<LocalDoc>) => {
@@ -204,6 +206,101 @@ const Index = () => {
     }
   };
 
+  const handleAnalyze = async () => {
+    try {
+      setAnalyzeLoading(true);
+      setStrategyResults(null);
+      const tickers = tickersInput
+        .split(/[\s,]+/)
+        .map((t) => t.trim().toUpperCase())
+        .filter(Boolean);
+      if (tickers.length === 0) {
+        toast({ title: "No tickers", description: "Please enter at least one ticker.", variant: "destructive" });
+        return;
+      }
+      toast({ title: "Analyzing", description: "Running forecasts, sentiment, and anomaly checks..." });
+
+      const [forecastResp, sentimentResp, anomaliesResp, docsResp] = await Promise.all([
+        supabase.functions.invoke("forecast-stocks", { body: { tickers } }),
+        supabase.functions.invoke("analyze-sentiment", { body: {} }),
+        supabase.functions.invoke("analyze-anomalies", { body: {} }),
+        supabase.from("documents").select("title").order("created_at", { ascending: false }),
+      ]);
+
+      if (forecastResp.error) throw forecastResp.error;
+      if (sentimentResp.error) console.warn("sentiment error", sentimentResp.error);
+      if (anomaliesResp.error) console.warn("anomalies error", anomaliesResp.error);
+
+      const forecast = (forecastResp.data as any)?.tickers ?? [];
+      const companies = (sentimentResp.data as any)?.companies ?? [];
+      const anomalies = (anomaliesResp.data as any)?.anomalies ?? [];
+      const docTitles: string[] = (docsResp.data as any)?.map((d: any) => d.title) ?? [];
+
+      const mapTickerToName: Record<string, string> = { WMT: "Walmart", MCD: "McDonald", ADBE: "Adobe" };
+
+      const findSentiment = (sym: string) => {
+        const guess = mapTickerToName[sym] || sym;
+        const match = companies.find((c: any) => c.name?.toLowerCase().includes(guess.toLowerCase()));
+        return typeof match?.score === "number" ? match.score : 0;
+      };
+
+      const countHighAnomalies = (sym: string) => {
+        const guess = mapTickerToName[sym] || sym;
+        return anomalies.filter((a: any) => (a.company || "").toLowerCase().includes(guess.toLowerCase()) && a.severity === "high").length;
+      };
+
+      const strategies = tickers.map((sym) => {
+        const f = forecast.find((t: any) => t.symbol === sym);
+        const exp = Number(f?.metrics?.expectedChangePct ?? 0);
+        const vol = Number(f?.metrics?.volatility ?? 0);
+        const trend = (f?.metrics?.trend as "up" | "down" | "flat") || "flat";
+        const sent = findSentiment(sym);
+        const highAnoms = countHighAnomalies(sym);
+
+        let decision: "Buy" | "Sell" | "Hold" = "Hold";
+        if (exp >= 5 && sent > 0.1 && highAnoms === 0) decision = "Buy";
+        else if (exp <= -3 || sent < -0.2 || highAnoms > 0) decision = "Sell";
+
+        let confidence = 60;
+        confidence += Math.max(-10, Math.min(10, exp / 2));
+        confidence += sent * 20; // -20..+20
+        if (highAnoms > 0) confidence -= 15;
+        if (trend === "up") confidence += 5; else if (trend === "down") confidence -= 5;
+        confidence = Math.max(10, Math.min(95, confidence));
+
+        const reasons: string[] = [];
+        reasons.push(`30d forecast: ${exp.toFixed(2)}% (${trend} trend)`);
+        reasons.push(`Volatility (σ): ${vol.toFixed(2)}%`);
+        reasons.push(`Sentiment: ${sent.toFixed(2)}`);
+        if (highAnoms > 0) reasons.push(`${highAnoms} high-severity anomaly${highAnoms > 1 ? "ies" : "y"} detected in filings`);
+
+        const sources = [
+          `Market data: Yahoo Finance (2y daily) for ${sym}`,
+          ...(docTitles.length ? [
+            `Uploaded documents (${docTitles.length}): ${docTitles.slice(0, 5).join(", ")}${docTitles.length > 5 ? "…" : ""}`,
+          ] : []),
+        ];
+
+        return {
+          symbol: sym,
+          decision,
+          confidence,
+          metrics: { expectedChangePct: exp, volatility: vol, sentiment: sent, trend },
+          reasons,
+          sources,
+        };
+      });
+
+      setStrategyResults(strategies);
+      toast({ title: "Strategy ready", description: "Buy/Sell/Hold recommendations generated." });
+    } catch (err: any) {
+      console.error("Analyze error", err);
+      toast({ title: "Error", description: err?.message || "Failed to analyze", variant: "destructive" });
+    } finally {
+      setAnalyzeLoading(false);
+    }
+  };
+
   return (
     <main className="min-h-screen py-16">
       <section className="container mx-auto max-w-5xl px-4">
@@ -317,8 +414,12 @@ const Index = () => {
                     <Button variant="secondary" onClick={handleForecast} disabled={forecastLoading}>
                       {forecastLoading ? "Forecasting..." : "Run Forecast"}
                     </Button>
+                    <Button onClick={handleAnalyze} disabled={analyzeLoading}>
+                      {analyzeLoading ? "Analyzing..." : "Analyze Strategy"}
+                    </Button>
                   </div>
                   <ForecastResults data={forecastResults} />
+                  <StrategyResults results={strategyResults} />
                 </TabsContent>
               </Tabs>
             </CardContent>
