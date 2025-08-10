@@ -603,7 +603,7 @@ const Index = () => {
                                   <Dialog>
                                     <DialogTrigger asChild>
                                       <Button variant="link" size="sm" className="px-2 h-auto">
-                                        View sources ({m.citations.length})
+                                        View sources ({Array.from(new Set((m.citations as Citation[]).map(c => c.document_id))).length})
                                       </Button>
                                     </DialogTrigger>
                                     <DialogContent>
