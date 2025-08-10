@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { GradientOrb } from "@/components/GradientOrb";
+import { supabase } from "@/integrations/supabase/client";
 
 interface LocalDoc {
   name: string;
@@ -32,10 +33,22 @@ const Index = () => {
     toast({ title: "Documents added", description: `${accepted.length} PDF(s) queued` });
   };
 
-  const handleAsk = (e: React.FormEvent) => {
+  const handleAsk = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!question.trim()) return;
-    toast({ title: "Backend not connected", description: "Connect Supabase to enable RAG Q&A." });
+    const q = question.trim();
+    if (!q) return;
+    toast({ title: "Asking OpenAI...", description: "Generating answer" });
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-answer", {
+        body: { question: q },
+      });
+      if (error) throw error;
+      const answer: string = data?.answer ?? "No answer returned.";
+      toast({ title: "Answer", description: answer });
+    } catch (err: any) {
+      console.error("Q&A error", err);
+      toast({ title: "Error", description: err?.message || "Failed to get answer", variant: "destructive" });
+    }
   };
 
   const handleSentiment = () => {
